@@ -1,0 +1,66 @@
+services:
+  # Mveng API Server
+  mveng:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mveng-api
+    ports:
+      - "3000:3000"
+    environment:
+      - RUST_LOG=info
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=3000
+    volumes:
+      - audio_data:/app/audio_recordings
+      - logs_data:/app/logs
+    restart: unless-stopped
+    networks:
+      - mveng-network
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/hello"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+
+    # Redis for session management
+  redis:
+    image: redis:7-alpine
+    container_name: mveng-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - mveng-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+
+volumes:
+  audio_data:
+    driver: local
+  redis_data:
+    driver: local
+  ollama_data:
+    driver: local
+  postgres_data:
+    driver: local
+  logs_data:
+    driver: local
+  nginx_logs:
+    driver: local
+
+networks:
+  mveng-network:
+    driver: bridge
+    name: mveng-network

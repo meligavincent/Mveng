@@ -1,0 +1,43 @@
+# Rust
+target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Logs
+*.log
+logs/
+
+# Audio files (development)
+audio_recordings/
+*.wav
+*.mp3
+*.m4a
+
+# Environment
+.env
+.env.local
+
+# Documentation
+README.md
+docs/
+
+# CI/CD
+.github/
