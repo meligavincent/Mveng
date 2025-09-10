@@ -41,3 +41,6 @@ docs/
 
 # CI/CD
 .github/
+
+#AI
+ollama
