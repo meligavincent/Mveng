@@ -45,6 +45,97 @@ services:
       timeout: 10s
       retries: 3
 
+  ollama:
+    image: docker.io/ollama/ollama:latest
+    ports:
+      - 7869:11434
+    volumes:
+      - .:/code
+      - ./ollama/ollama:/root/.ollama
+    container_name: ollama
+    pull_policy: always
+    tty: true
+    restart: always
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - mveng-network
+
+  ollama-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: ollama-webui
+    volumes:
+      - ./ollama/ollama-webui:/app/backend/data
+    depends_on:
+      - ollama
+    ports:
+      - 8080:8080
+    environment: # https://docs.openwebui.com/getting-started/env-configuration#default_models
+      - OLLAMA_BASE_URLS=http://host.docker.internal:7869 #comma separated ollama hosts
+      - ENV=dev
+      - WEBUI_AUTH=False
+      - WEBUI_NAME=valiantlynx AI
+      - WEBUI_URL=http://localhost:8080
+      - WEBUI_SECRET_KEY=t0p-s3cr3t
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    restart: unless-stopped
+    networks:
+      - mveng-network
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: mveng-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx_logs:/var/log/nginx
+    restart: unless-stopped
+    networks:
+      - mveng-network
+    depends_on:
+      - mveng
+    profiles:
+      - production
+
+  # Whisper service for transcription (future integration)
+  whisper:
+      build:
+        context: .
+        dockerfile: Dockerfile.whisper
+      container_name: whisper
+      volumes:
+        - ./data:/app/data   # optional: where you'll drop audio files later
+      command: ["whisper"]
+
+  # PostgreSQL for conversation history (optional)
+  postgres:
+    image: postgres:15-alpine
+    container_name: mveng-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=mveng
+      - POSTGRES_USER=mveng
+      - POSTGRES_PASSWORD=mveng_password_2024
+      - POSTGRES_HOST_AUTH_METHOD=scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: unless-stopped
+    networks:
+      - mveng-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mveng -d mveng"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - database
 
 volumes:
   audio_data:
