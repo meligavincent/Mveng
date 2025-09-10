@@ -1,94 +1,67 @@
 use axum::{
-    response::Json,
-    routing::get,
-    Router,
+    extract::Multipart,
+    response::IntoResponse,
+    routing::post,
+    Json, Router,
 };
-use serde::{Deserialize, Serialize};
-use utoipa::{OpenApi, ToSchema};
+use serde::Serialize;
+use std::net::SocketAddr;
+use utoipa::ToSchema;
+use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-// Response model
 #[derive(Serialize, ToSchema)]
-struct HelloResponse {
-    message: String,
-    status: String,
+struct UploadResponse {
+    saved: String,
 }
 
-#[derive(Serialize, ToSchema)]
-struct MvengResponse {
-    greeting: String,
-    wisdom: String,
-    from: String,
+#[derive(ToSchema)]
+struct AudioUpload {
+    /// The audio file (multipart/form-data)
+    file: String,
 }
 
-/// Simple hello world endpoint
 #[utoipa::path(
-    get,
-    path = "/hello",
+    post,
+    path = "/upload",
+    request_body(
+        content = String,
+        content_type = "multipart/form-data",
+        description = "Upload an audio file"
+    ),
     responses(
-        (status = 200, description = "Hello world response", body = HelloResponse)
-    ),
-    tag = "greetings"
-)]
-async fn hello_world() -> Json<HelloResponse> {
-    Json(HelloResponse {
-        message: "Hello, World!".to_string(),
-        status: "success".to_string(),
-    })
-}
-
-/// Mveng greeting endpoint with African wisdom
-#[utoipa::path(
-    get,
-    path = "/mveng",
-    responses(
-        (status = 200, description = "Mveng greeting with African wisdom", body = MvengResponse)
-    ),
-    tag = "greetings"
-)]
-async fn mveng_greeting() -> Json<MvengResponse> {
-    Json(MvengResponse {
-        greeting: "🌍 Akwaaba! Welcome, friend!".to_string(),
-        wisdom: "Nkukuma nkobe ye, a si nkukuma nda - The storyteller is like a tree, rooted in wisdom".to_string(),
-        from: "Mveng, your African storyteller".to_string(),
-    })
-}
-
-// OpenAPI documentation
-#[derive(OpenApi)]
-#[openapi(
-    paths(hello_world, mveng_greeting),
-    components(schemas(HelloResponse, MvengResponse)),
-    tags(
-        (name = "greetings", description = "Simple greeting endpoints")
-    ),
-    info(
-        title = "Mveng - Hello World API",
-        version = "1.0.0",
-        description = "🌍 Simple Hello World API for Mveng - African AI Assistant"
+        (status = 200, description = "File uploaded successfully", body = UploadResponse)
     )
 )]
+async fn upload_audio(mut multipart: Multipart) -> impl IntoResponse {
+    while let Some(field) = multipart.next_field().await.unwrap() {
+        if let Some(filename) = field.file_name().map(|f| f.to_string()) {
+            let data = field.bytes().await.unwrap();
+            let filepath = format!("./data/{filename}");
+            tokio::fs::create_dir_all("./data").await.unwrap();
+            tokio::fs::write(&filepath, &data).await.unwrap();
+            return Json(UploadResponse { saved: filepath });
+        }
+    }
+    Json(UploadResponse {
+        saved: "No file uploaded".to_string(),
+    })
+}
+
+#[derive(OpenApi)]
+#[openapi(paths(upload_audio), components(schemas(AudioUpload, UploadResponse)))]
 struct ApiDoc;
 
 #[tokio::main]
 async fn main() {
-    // Initialize tracing
-    tracing_subscriber::fmt::init();
-
-    // Build our application with routes
     let app = Router::new()
-        .route("/hello", get(hello_world))
-        .route("/mveng", get(mveng_greeting))
-        // Add Swagger UI
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()));
+        .route("/upload", post(upload_audio))
+        .merge(SwaggerUi::new("/docs").url("/api-doc/openapi.json", ApiDoc::openapi()));
 
-    // Run the server
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    
-    println!("🌍 Mveng server starting...");
-    println!("📖 Swagger UI: http://localhost:3000/swagger-ui");
-    println!("🎯 Hello endpoint: http://localhost:3000/hello");
-    println!("🌟 Mveng endpoint: http://localhost:3000/mveng");
-    
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    println!("Server running at http://{}", addr);
+    println!("Docs available at http://{}/docs", addr);
+
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }

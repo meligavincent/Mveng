@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Recorder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .recorder-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+
+        .record-button {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            margin: 20px;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: bold;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .record-button.start {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            box-shadow: 0 10px 20px rgba(255, 107, 107, 0.3);
+        }
+
+        .record-button.stop {
+            background: linear-gradient(45deg, #ff3838, #c0392b);
+            color: white;
+            box-shadow: 0 10px 20px rgba(255, 56, 56, 0.4);
+            animation: pulse 1.5s infinite;
+        }
+
+        .record-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .status {
+            margin: 20px 0;
+            font-size: 18px;
+            color: #666;
+            min-height: 25px;
+        }
+
+        .status.recording {
+            color: #ff3838;
+            font-weight: bold;
+        }
+
+        .upload-button {
+            background: linear-gradient(45deg, #2ecc71, #27ae60);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s ease;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .upload-button.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .upload-button:hover {
+            background: linear-gradient(45deg, #27ae60, #2ecc71);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(46, 204, 113, 0.3);
+        }
+
+        .upload-button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .audio-preview {
+            margin: 20px 0;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.3s ease;
+        }
+
+        .audio-preview.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        audio {
+            width: 100%;
+            border-radius: 10px;
+        }
+
+        .message {
+            margin: 15px 0;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: bold;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+        }
+
+        .message.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .message.success {
+            background: rgba(46, 204, 113, 0.1);
+            color: #27ae60;
+            border: 2px solid rgba(46, 204, 113, 0.3);
+        }
+
+        .message.error {
+            background: rgba(231, 76, 60, 0.1);
+            color: #c0392b;
+            border: 2px solid rgba(231, 76, 60, 0.3);
+        }
+
+        .timer {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ff3838;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="recorder-container">
+        <h1>🎙️ Voice Recorder</h1>
+        
+        <button id="recordButton" class="record-button start">
+            <span id="buttonText">Start Recording</span>
+        </button>
+        
+        <div id="timer" class="timer" style="display: none;">00:00</div>
+        <div id="status" class="status">Click to start recording</div>
+        
+        <div id="audioPreview" class="audio-preview">
+            <audio id="audioPlayer" controls style="display: none;"></audio>
+        </div>
+        
+        <button id="uploadButton" class="upload-button">
+            📤 Upload Recording
+        </button>
+        
+        <div id="message" class="message"></div>
+    </div>
+
+    <script>
+        class VoiceRecorder {
+            constructor() {
+                this.mediaRecorder = null;
+                this.audioChunks = [];
+                this.isRecording = false;
+                this.startTime = null;
+                this.timerInterval = null;
+                
+                this.recordButton = document.getElementById('recordButton');
+                this.uploadButton = document.getElementById('uploadButton');
+                this.status = document.getElementById('status');
+                this.audioPlayer = document.getElementById('audioPlayer');
+                this.audioPreview = document.getElementById('audioPreview');
+                this.message = document.getElementById('message');
+                this.timer = document.getElementById('timer');
+                this.buttonText = document.getElementById('buttonText');
+                
+                this.init();
+            }
+            
+            async init() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    this.mediaRecorder = new MediaRecorder(stream);
+                    this.setupEventListeners();
+                    this.updateStatus('Ready to record');
+                } catch (error) {
+                    this.showMessage('Microphone access denied. Please allow microphone access.', 'error');
+                }
+            }
+            
+            setupEventListeners() {
+                this.recordButton.addEventListener('click', () => this.toggleRecording());
+                this.uploadButton.addEventListener('click', () => this.uploadAudio());
+                
+                this.mediaRecorder.addEventListener('dataavailable', (event) => {
+                    this.audioChunks.push(event.data);
+                });
+                
+                this.mediaRecorder.addEventListener('stop', () => {
+                    const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    
+                    this.audioPlayer.src = audioUrl;
+                    this.audioPlayer.style.display = 'block';
+                    this.audioPreview.classList.add('show');
+                    this.uploadButton.classList.add('show');
+                    
+                    this.audioBlob = audioBlob;
+                });
+            }
+            
+            toggleRecording() {
+                if (!this.isRecording) {
+                    this.startRecording();
+                } else {
+                    this.stopRecording();
+                }
+            }
+            
+            startRecording() {
+                this.audioChunks = [];
+                this.mediaRecorder.start();
+                this.isRecording = true;
+                this.startTime = Date.now();
+                
+                // Update UI
+                this.recordButton.classList.remove('start');
+                this.recordButton.classList.add('stop');
+                this.buttonText.textContent = 'Stop Recording';
+                this.updateStatus('Recording...', 'recording');
+                this.timer.style.display = 'block';
+                
+                // Hide previous audio and upload button
+                this.audioPreview.classList.remove('show');
+                this.uploadButton.classList.remove('show');
+                this.hideMessage();
+                
+                // Start timer
+                this.startTimer();
+            }
+            
+            stopRecording() {
+                this.mediaRecorder.stop();
+                this.isRecording = false;
+                
+                // Update UI
+                this.recordButton.classList.remove('stop');
+                this.recordButton.classList.add('start');
+                this.buttonText.textContent = 'Start Recording';
+                this.updateStatus('Recording saved');
+                this.timer.style.display = 'none';
+                
+                // Stop timer
+                this.stopTimer();
+            }
+            
+            startTimer() {
+                this.timerInterval = setInterval(() => {
+                    const elapsed = Date.now() - this.startTime;
+                    const minutes = Math.floor(elapsed / 60000);
+                    const seconds = Math.floor((elapsed % 60000) / 1000);
+                    this.timer.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }, 1000);
+            }
+            
+            stopTimer() {
+                if (this.timerInterval) {
+                    clearInterval(this.timerInterval);
+                    this.timerInterval = null;
+                }
+            }
+            
+            async uploadAudio() {
+                if (!this.audioBlob) return;
+                
+                this.uploadButton.disabled = true;
+                this.uploadButton.textContent = 'Uploading...';
+                
+                try {
+                    const formData = new FormData();
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                    const filename = `recording-${timestamp}.wav`;
+                    formData.append('file', this.audioBlob, filename);
+                    
+                    const response = await fetch('http://localhost:3000/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        this.showMessage(`✅ Uploaded successfully: ${result.saved}`, 'success');
+                    } else {
+                        throw new Error(`Upload failed: ${response.statusText}`);
+                    }
+                } catch (error) {
+                    this.showMessage(`❌ Upload failed: ${error.message}`, 'error');
+                } finally {
+                    this.uploadButton.disabled = false;
+                    this.uploadButton.textContent = '📤 Upload Recording';
+                }
+            }
+            
+            updateStatus(text, className = '') {
+                this.status.textContent = text;
+                this.status.className = `status ${className}`;
+            }
+            
+            showMessage(text, type) {
+                this.message.textContent = text;
+                this.message.className = `message ${type} show`;
+                
+                setTimeout(() => {
+                    this.hideMessage();
+                }, 5000);
+            }
+            
+            hideMessage() {
+                this.message.classList.remove('show');
+            }
+        }
+        
+        // Initialize the voice recorder when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new VoiceRecorder();
+        });
+    </script>
+</body>
+</html>
